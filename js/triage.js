@@ -119,6 +119,7 @@ export function isReadyToMerge(pr) {
     pr.reviews.approvedBy.length > 0 &&
     pr.reviews.changesRequestedBy.length === 0 &&
     pr.checks.failed.length === 0 &&
+    pr.checks.cancelled.length === 0 &&
     pr.checks.pending.length === 0
   );
 }

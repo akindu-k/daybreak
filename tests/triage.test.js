@@ -90,7 +90,7 @@ test("reviewVerdicts keeps each reviewer's latest verdict and ignores the author
   for (const { reviews, expected } of cases) assert.deepEqual(reviewVerdicts(reviews, "me"), expected);
 });
 
-test("isReadyToMerge requires approval, green CI, no conflicts and no draft", () => {
+test("isReadyToMerge requires approval, fully green CI, no conflicts and no draft", () => {
   const failing = { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [checkRun("COMPLETED", "FAILURE")] } } } }] };
   const cases = [
     [{}, true],
@@ -98,6 +98,7 @@ test("isReadyToMerge requires approval, green CI, no conflicts and no draft", ()
     [{ mergeable: "CONFLICTING" }, false],
     [{ reviews: { nodes: [] } }, false],
     [{ commits: failing }, false],
+    [{ commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [checkRun("COMPLETED", "CANCELLED")] } } } }] } }, false],
     [{ reviews: { nodes: [{ author: { login: "lead" }, state: "CHANGES_REQUESTED" }] } }, false],
   ];
   for (const [overrides, expected] of cases) assert.equal(isReadyToMerge(pr(overrides)), expected, JSON.stringify(overrides));
