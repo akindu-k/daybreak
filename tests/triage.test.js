@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkOutcome, isReadyToMerge, issueSignals, normalizeWorkload, prSignals, referencesIssue, reviewVerdicts } from "../js/triage.js";
+import { checkOutcome, isReadyToMerge, issueSignals, normalizeWorkload, prLane, prSignals, referencesIssue, reviewVerdicts } from "../js/triage.js";
 
 const NOW = Date.parse("2026-10-10T08:00:00Z");
 
@@ -106,13 +106,13 @@ test("isReadyToMerge requires approval, green CI, no conflicts and no draft", ()
 test("prSignals surfaces what blocks a pull request", () => {
   const closedIssue = { number: 9, title: "x", url: "u", state: "CLOSED", stateReason: "NOT_PLANNED", repository: { nameWithOwner: "o/r" } };
   const cases = [
-    [{}, ["Ready to merge", "Approved by lead"]],
+    [{}, ["Approved by lead"]],
     [{ mergeable: "CONFLICTING" }, ["Merge conflicts", "Approved by lead"]],
     [{ reviews: { nodes: [] } }, ["No review yet"]],
-    [{ reviews: { nodes: [] }, isDraft: true }, ["Draft"]],
-    [{ reviewThreads: { nodes: [{ isResolved: false }, { isResolved: true }] } }, ["Ready to merge", "Approved by lead", "1 unresolved threads"]],
-    [{ closingIssuesReferences: { nodes: [closedIssue] } }, ["Ready to merge", "Approved by lead", "#9 closed as not planned"]],
-    [{ updatedAt: "2026-09-20T08:00:00Z" }, ["Ready to merge", "Approved by lead", "Idle 20 days"]],
+    [{ reviews: { nodes: [] }, isDraft: true }, []],
+    [{ reviewThreads: { nodes: [{ isResolved: false }, { isResolved: true }] } }, ["1 unresolved threads", "Approved by lead"]],
+    [{ closingIssuesReferences: { nodes: [closedIssue] } }, ["#9 closed as not planned", "Approved by lead"]],
+    [{ updatedAt: "2026-09-20T08:00:00Z" }, ["Idle 20 days", "Approved by lead"]],
   ];
   for (const [overrides, expected] of cases) {
     assert.deepEqual(prSignals(pr(overrides)).map((signal) => signal.text), expected, JSON.stringify(overrides));
@@ -138,14 +138,27 @@ test("referencesIssue matches closing references and same-repo title mentions", 
   for (const [overrides, repo, number, expected] of cases) assert.equal(referencesIssue(pr(overrides), repo, number), expected, JSON.stringify([overrides.title, repo, number]));
 });
 
-test("issueSignals flags urgent labels and missing pull requests", () => {
+test("issueSignals flags urgent labels and idle issues", () => {
   const cases = [
-    [issueNode(), ["No PR yet"]],
-    [issueNode({ labels: { nodes: [{ name: "P0" }, { name: "docs" }] } }), ["P0", "No PR yet"]],
-    [issueNode({ updatedAt: "2026-09-01T08:00:00Z" }), ["No PR yet", "Idle 39 days"]],
+    [issueNode(), []],
+    [issueNode({ labels: { nodes: [{ name: "P0" }, { name: "docs" }] } }), ["P0"]],
+    [issueNode({ updatedAt: "2026-09-01T08:00:00Z" }), ["Idle 39 days"]],
   ];
   for (const [node, expected] of cases) {
     const [issue] = normalizeWorkload({ login: "me", prs: [], issues: [node] }, NOW).issues;
     assert.deepEqual(issueSignals(issue).map((signal) => signal.text), expected);
   }
+});
+
+test("prLane says whose move it is", () => {
+  const cases = [
+    [{}, "ready"],
+    [{ isDraft: true, mergeable: "CONFLICTING" }, "draft"],
+    [{ mergeable: "CONFLICTING" }, "action"],
+    [{ reviews: { nodes: [] }, reviewThreads: { nodes: [{ isResolved: false }] } }, "action"],
+    [{ reviews: { nodes: [] } }, "waiting"],
+    [{ commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [checkRun("COMPLETED", "CANCELLED")] } } } }] } }, "action"],
+    [{ commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [checkRun("IN_PROGRESS", null)] } } } }] } }, "waiting"],
+  ];
+  for (const [overrides, expected] of cases) assert.equal(prLane(pr(overrides)), expected, JSON.stringify(overrides));
 });

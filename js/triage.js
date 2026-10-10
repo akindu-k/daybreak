@@ -123,33 +123,63 @@ export function isReadyToMerge(pr) {
   );
 }
 
-/** Lists the status badges for a pull request, most important first. */
+/** Returns true when the author has something to fix before the pull request can move. */
+export function needsAuthor(pr) {
+  return (
+    pr.mergeable === "CONFLICTING" ||
+    pr.checks.failed.length > 0 ||
+    pr.checks.cancelled.length > 0 ||
+    pr.reviews.changesRequestedBy.length > 0 ||
+    pr.unresolvedThreads > 0 ||
+    pr.linkedIssues.some((issue) => issue.state === "CLOSED")
+  );
+}
+
+/** Places a pull request in the lane that says whose move it is. */
+export function prLane(pr) {
+  if (pr.isDraft) return "draft";
+  if (isReadyToMerge(pr)) return "ready";
+  return needsAuthor(pr) ? "action" : "waiting";
+}
+
+/** Places an issue in a lane by whether work on it has started. */
+export function issueLane(issue) {
+  return issue.linkedPrs.length ? "started" : "todo";
+}
+
+/** Returns the total number of changed lines. */
+export function prSize(pr) {
+  return pr.size.additions + pr.size.deletions;
+}
+
+/** Returns true when an issue carries an urgency label such as P0. */
+export function isUrgent(issue) {
+  return issue.labels.some((label) => URGENT_LABEL.test(label));
+}
+
+/** Lists the reasons behind a pull request's lane, most important first. */
 export function prSignals(pr) {
   const signals = [];
   const add = (tone, text) => signals.push({ tone, text });
-  if (isReadyToMerge(pr)) add("good", "Ready to merge");
-  if (pr.isDraft) add("neutral", "Draft");
   if (pr.mergeable === "CONFLICTING") add("bad", "Merge conflicts");
   if (pr.checks.failed.length) add("bad", `${pr.checks.failed.length} failing checks`);
-  if (pr.checks.cancelled.length) add("warn", "Cancelled checks, re-run CI");
-  if (pr.checks.pending.length) add("neutral", "CI running");
-  if (pr.reviews.changesRequestedBy.length) add("warn", `Changes requested by ${pr.reviews.changesRequestedBy.join(", ")}`);
-  if (pr.reviews.approvedBy.length) add("good", `Approved by ${pr.reviews.approvedBy.join(", ")}`);
-  if (!pr.reviews.reviewers && !pr.isDraft) add("warn", "No review yet");
-  if (pr.unresolvedThreads) add("warn", `${pr.unresolvedThreads} unresolved threads`);
   for (const issue of pr.linkedIssues.filter((linked) => linked.state === "CLOSED")) {
     add("bad", `#${issue.number} closed${issue.stateReason === "NOT_PLANNED" ? " as not planned" : ""}`);
   }
+  if (pr.reviews.changesRequestedBy.length) add("warn", `Changes requested by ${pr.reviews.changesRequestedBy.join(", ")}`);
+  if (pr.unresolvedThreads) add("warn", `${pr.unresolvedThreads} unresolved threads`);
+  if (pr.checks.cancelled.length) add("warn", "Cancelled checks, re-run CI");
+  if (!pr.reviews.reviewers && !pr.isDraft) add("warn", "No review yet");
   if (pr.idleDays >= IDLE_DAYS) add("warn", `Idle ${pr.idleDays} days`);
+  if (pr.checks.pending.length) add("neutral", "CI running");
+  if (pr.reviews.approvedBy.length) add("good", `Approved by ${pr.reviews.approvedBy.join(", ")}`);
   return signals;
 }
 
-/** Lists the status badges for an assigned issue. */
+/** Lists what stands out about an assigned issue. */
 export function issueSignals(issue) {
   const signals = [];
-  const urgent = issue.labels.filter((label) => URGENT_LABEL.test(label));
-  if (urgent.length) signals.push({ tone: "bad", text: urgent.join(", ") });
-  signals.push(issue.linkedPrs.length ? { tone: "good", text: "Has a PR" } : { tone: "warn", text: "No PR yet" });
+  if (isUrgent(issue)) signals.push({ tone: "bad", text: issue.labels.filter((label) => URGENT_LABEL.test(label)).join(", ") });
   if (issue.idleDays >= IDLE_DAYS) signals.push({ tone: "warn", text: `Idle ${issue.idleDays} days` });
   return signals;
 }

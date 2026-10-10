@@ -21,6 +21,7 @@ export function renderSettings(settings, { onSave, onClear, extraFields = [] }) 
     "main",
     { class: "settings" },
     el("h1", {}, "Settings"),
+    el("p", { class: "muted" }, "Everything here stays in this browser and is only sent to the service it belongs to."),
     el(
       "form",
       { onsubmit: submit },
@@ -31,8 +32,8 @@ export function renderSettings(settings, { onSave, onClear, extraFields = [] }) 
       ),
       extraFields,
       field("Repositories (optional)", repos, "Limit the dashboard to these repositories. Leave empty for all."),
-      el("label", { class: "check" }, remember, " Remember on this device (otherwise kept for this tab only)"),
-      el("div", { class: "actions" }, el("button", { type: "submit", class: "primary" }, "Save"), el("button", { type: "button", onclick: onClear }, "Clear stored data")),
+      el("label", { class: "check-field" }, remember, " Remember on this device (otherwise kept for this tab only)"),
+      el("div", { class: "actions" }, el("button", { type: "submit", class: "primary" }, "Save"), el("button", { type: "button", class: "ghost danger", onclick: onClear }, "Clear stored data")),
     ),
   );
 }

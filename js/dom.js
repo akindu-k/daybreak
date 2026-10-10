@@ -23,5 +23,6 @@ export function link(href, text) {
 
 /** Renders a row of signal badges. */
 export function badges(signals) {
-  return el("span", { class: "badges" }, signals.map(({ tone, text }) => el("span", { class: `badge ${tone}` }, text)));
+  if (!signals.length) return null;
+  return el("span", { class: "badges" }, signals.map(({ tone, text }) => el("span", { class: `tag ${tone}` }, text)));
 }
