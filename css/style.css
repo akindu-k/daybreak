@@ -237,3 +237,33 @@ button.ghost:hover, .button.ghost:hover { background: var(--surface-2); }
   .topbar { padding: 0.6rem 1rem; gap: 0.75rem; }
   .today { display: none; }
 }
+
+/* Plan */
+.plan { padding: 1.1rem 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.plan.setup { color: var(--muted); }
+.plan-head { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 0.6rem; }
+.plan-head h2 { font-size: 1rem; }
+.plan-actions { margin-left: auto; display: flex; gap: 0.25rem; }
+.plan-summary { margin-bottom: 0.9rem; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.6rem; }
+.step { display: flex; gap: 0.75rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.step-number { flex: none; display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 0.8rem; font-weight: 700; }
+.step-body { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; font-size: 0.9rem; }
+.step-head { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.step-head a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.85rem; }
+.step-action { font-weight: 550; }
+
+/* Briefing */
+.brief { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.brief-head { display: flex; align-items: center; margin-bottom: 0.5rem; }
+.brief-head h3 { margin: 0; }
+.brief-head button { margin-left: auto; }
+.brief-status { font-weight: 550; margin-bottom: 0.6rem; }
+.brief-part { margin-top: 0.6rem; font-size: 0.9rem; }
+.brief-part h4 { margin: 0 0 0.25rem; font-size: 0.8rem; color: var(--muted); }
+.brief-part ul, .brief-part ol { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; }
+
+/* Settings extras */
+.inline { display: flex; gap: 0.5rem; }
+.inline select { flex: 1; min-width: 0; }
+.error-text { color: var(--bad); }

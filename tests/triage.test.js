@@ -1,55 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { NOW, checkRun, issueNode, prNode } from "./fixtures.js";
 import { checkOutcome, isReadyToMerge, issueSignals, normalizeWorkload, prLane, prSignals, referencesIssue, reviewVerdicts } from "../js/triage.js";
-
-const NOW = Date.parse("2026-10-10T08:00:00Z");
-
-/** Builds a raw pull request node with sensible defaults. */
-function prNode(overrides = {}) {
-  return {
-    number: 1,
-    title: "Fix things",
-    url: "https://github.com/o/r/pull/1",
-    isDraft: false,
-    createdAt: "2026-10-01T08:00:00Z",
-    updatedAt: "2026-10-09T08:00:00Z",
-    additions: 10,
-    deletions: 2,
-    changedFiles: 1,
-    baseRefName: "main",
-    mergeable: "MERGEABLE",
-    author: { login: "me" },
-    repository: { nameWithOwner: "o/r" },
-    labels: { nodes: [] },
-    reviews: { nodes: [{ author: { login: "lead" }, state: "APPROVED" }] },
-    reviewThreads: { nodes: [] },
-    closingIssuesReferences: { nodes: [] },
-    commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [] } } } }] },
-    ...overrides,
-  };
-}
-
-/** Builds a raw issue node with sensible defaults. */
-function issueNode(overrides = {}) {
-  return {
-    number: 7,
-    title: "Broken",
-    url: "https://github.com/o/r/issues/7",
-    createdAt: "2026-10-01T08:00:00Z",
-    updatedAt: "2026-10-09T08:00:00Z",
-    repository: { nameWithOwner: "o/r" },
-    labels: { nodes: [] },
-    comments: { totalCount: 0 },
-    ...overrides,
-  };
-}
 
 /** Normalizes a single pull request node. */
 function pr(overrides) {
   return normalizeWorkload({ login: "me", prs: [prNode(overrides)], issues: [] }, NOW).prs[0];
 }
 
-const checkRun = (status, conclusion) => ({ __typename: "CheckRun", name: "ci", status, conclusion });
 
 test("checkOutcome classifies check runs and statuses", () => {
   const cases = [

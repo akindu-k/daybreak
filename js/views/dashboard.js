@@ -67,8 +67,8 @@ function renderSummary(groups) {
   );
 }
 
-/** Renders the summary, the lanes and the detail pane. */
-export function renderDashboard({ workload, selectedKey, top, detail }) {
+/** Renders the summary, the plan, the lanes and the detail pane. */
+export function renderDashboard({ workload, selectedKey, top, plan, detail }) {
   const groups = groupWorkload(workload);
   const empty = groups.every(({ items }) => !items.length);
   return el(
@@ -76,6 +76,7 @@ export function renderDashboard({ workload, selectedKey, top, detail }) {
     { class: "page" },
     top,
     renderSummary(groups),
+    plan,
     el(
       "div",
       { class: "layout" },
