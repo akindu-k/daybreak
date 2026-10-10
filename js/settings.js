@@ -1,5 +1,5 @@
 const STORAGE_KEY = "daybreak.settings";
-const DEFAULTS = { githubToken: "", repos: "", remember: true };
+const DEFAULTS = { githubToken: "", apiKey: "", model: "", repos: "", remember: true };
 
 /** Reads settings from browser storage, falling back to defaults. */
 export function loadSettings() {
@@ -30,6 +30,11 @@ export function clearStoredData() {
 /** Returns true when the dashboard has what it needs to load. */
 export function isConfigured(settings) {
   return Boolean(settings.githubToken);
+}
+
+/** Returns true when planning and briefings can call the API. */
+export function canPlan(settings) {
+  return Boolean(settings.apiKey && settings.model);
 }
 
 /** Parses the repository filter into a list of owner/name strings. */

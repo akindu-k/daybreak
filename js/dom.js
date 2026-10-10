@@ -21,6 +21,13 @@ export function link(href, text) {
   return el("a", { href, target: "_blank", rel: "noopener noreferrer" }, text);
 }
 
+/** Offers text to the user as a file download. */
+export function downloadText(filename, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+  el("a", { href: url, download: filename }).click();
+  URL.revokeObjectURL(url);
+}
+
 /** Renders a row of signal badges. */
 export function badges(signals) {
   if (!signals.length) return null;

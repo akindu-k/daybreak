@@ -1,15 +1,29 @@
-import { el, mount } from "./dom.js";
+import { downloadText, el, mount } from "./dom.js";
 import { fetchPrDetail, fetchWorkload } from "./github.js";
-import { clearStoredData, isConfigured, loadSettings, parseRepos, saveSettings } from "./settings.js";
+import { generateJson, listModels } from "./llm.js";
+import { briefingRequest, planRequest, planToMarkdown } from "./planner.js";
+import { canPlan, clearStoredData, isConfigured, loadSettings, parseRepos, saveSettings } from "./settings.js";
+import { readCache, todayStamp, writeCache } from "./store.js";
 import { normalizeWorkload } from "./triage.js";
+import { renderBriefing } from "./views/briefing.js";
 import { renderDashboard } from "./views/dashboard.js";
 import { renderHeader } from "./views/header.js";
 import { renderIssueDetail } from "./views/issue.js";
+import { renderPlan } from "./views/plan.js";
 import { renderPrDetail } from "./views/pr.js";
 import { renderSettings } from "./views/settings.js";
 
 const app = document.getElementById("app");
-const state = { workload: null, loading: false, error: "", prDetails: new Map() };
+const state = {
+  workload: null,
+  loading: false,
+  error: "",
+  prDetails: new Map(),
+  briefings: new Map(),
+  plan: null,
+  models: { list: [], loading: false, error: "" },
+  draft: null,
+};
 
 /** Parses the location hash into a view name and an optional item key. */
 function currentRoute() {
@@ -19,7 +33,7 @@ function currentRoute() {
   return { view: "home" };
 }
 
-/** Reloads pull requests and issues from GitHub. */
+/** Reloads pull requests and issues from GitHub, then makes sure today's plan exists. */
 async function refresh() {
   const settings = loadSettings();
   state.loading = true;
@@ -33,6 +47,38 @@ async function refresh() {
   }
   state.loading = false;
   render();
+  if (state.workload) ensureTodayPlan();
+}
+
+/** Uses today's cached plan, or generates one on the first visit of the day. */
+function ensureTodayPlan() {
+  if (!canPlan(loadSettings()) || state.plan?.loading) return;
+  const cached = readCache("plan", todayStamp());
+  if (cached) {
+    state.plan = cached;
+    render();
+  } else {
+    generatePlan();
+  }
+}
+
+/** Asks the model for today's plan and caches it for the rest of the day. */
+async function generatePlan() {
+  state.plan = { loading: true };
+  render();
+  try {
+    const value = await generateJson(loadSettings(), planRequest(state.workload, todayStamp()));
+    state.plan = { value, generatedAt: new Date().toISOString() };
+    writeCache("plan", todayStamp(), state.plan);
+  } catch (error) {
+    state.plan = { error: error.message };
+  }
+  render();
+}
+
+/** Downloads today's plan as a Markdown file. */
+function exportPlan() {
+  downloadText(`plan-${todayStamp()}.md`, planToMarkdown(state.plan.value, state.workload, todayStamp()));
 }
 
 /** Fetches reviews, threads and checks for a pull request once per refresh. */
@@ -46,24 +92,68 @@ async function loadPrDetail(pr) {
   render();
 }
 
+/** Loads a briefing from cache while the pull request is unchanged, otherwise asks the model. */
+async function loadBriefing(pr, detail, { force = false } = {}) {
+  const cacheName = `briefing:${pr.key}`;
+  const cached = !force && readCache(cacheName, pr.updatedAt);
+  if (cached) {
+    state.briefings.set(pr.key, { value: cached });
+    return;
+  }
+  state.briefings.set(pr.key, { loading: true });
+  try {
+    const value = await generateJson(loadSettings(), briefingRequest(pr, detail));
+    writeCache(cacheName, pr.updatedAt, value);
+    state.briefings.set(pr.key, { value });
+  } catch (error) {
+    state.briefings.set(pr.key, { error: error.message });
+  }
+  render();
+}
+
+/** Renders the pull request detail, starting any loads it still needs. */
+function renderPr(pr) {
+  if (!state.prDetails.has(pr.key)) loadPrDetail(pr);
+  const loaded = state.prDetails.get(pr.key);
+  let extra = null;
+  if (loaded.detail && canPlan(loadSettings())) {
+    if (!state.briefings.has(pr.key)) loadBriefing(pr, loaded.detail);
+    const onRegenerate = () => {
+      loadBriefing(pr, loaded.detail, { force: true });
+      render();
+    };
+    extra = renderBriefing({ briefing: state.briefings.get(pr.key), onRegenerate });
+  }
+  return renderPrDetail(pr, { ...loaded, extra });
+}
+
 /** Renders the detail pane for the selected item, if any. */
 function renderDetail(route) {
-  if (route.view === "pr") {
-    const pr = state.workload.prs.find((item) => item.key === route.key);
-    if (!pr) return null;
-    if (!state.prDetails.has(pr.key)) loadPrDetail(pr);
-    return renderPrDetail(pr, state.prDetails.get(pr.key));
+  const pool = route.view === "pr" ? state.workload.prs : route.view === "issue" ? state.workload.issues : [];
+  const item = pool.find((candidate) => candidate.key === route.key);
+  if (!item) return null;
+  return item.kind === "pr" ? renderPr(item) : renderIssueDetail(item);
+}
+
+/** Lists the models the entered key can use, keeping unsaved form values. */
+async function handleLoadModels(draft) {
+  state.draft = draft;
+  state.models = { list: [], loading: true, error: "" };
+  render();
+  try {
+    state.models = { list: await listModels(draft.apiKey), loading: false, error: "" };
+  } catch (error) {
+    state.models = { list: [], loading: false, error: error.message };
   }
-  if (route.view === "issue") {
-    const issue = state.workload.issues.find((item) => item.key === route.key);
-    return issue ? renderIssueDetail(issue) : null;
-  }
-  return null;
+  render();
 }
 
 /** Saves settings and reloads the dashboard. */
 function handleSave(settings) {
   saveSettings(settings);
+  state.draft = null;
+  state.plan = null;
+  state.briefings.clear();
   location.hash = "#/";
   refresh();
 }
@@ -71,7 +161,8 @@ function handleSave(settings) {
 /** Wipes stored settings and cached data. */
 function handleClear() {
   clearStoredData();
-  state.workload = null;
+  Object.assign(state, { workload: null, plan: null, draft: null, error: "" });
+  state.briefings.clear();
   render();
 }
 
@@ -84,11 +175,13 @@ function render() {
   const banner = state.error && el("p", { class: "error" }, state.error);
 
   if (route.view === "settings" || !configured) {
-    mount(app, header, renderSettings(settings, { onSave: handleSave, onClear: handleClear }));
+    const draft = state.draft ?? settings;
+    mount(app, header, renderSettings(draft, { models: state.models, onSave: handleSave, onClear: handleClear, onLoadModels: handleLoadModels }));
   } else if (!state.workload) {
-    mount(app, header, banner || el("p", { class: "muted empty" }, "Loading your pull requests and issues…"));
+    mount(app, header, banner || el("p", { class: "muted empty loading" }, "Loading your pull requests and issues"));
   } else {
-    mount(app, header, renderDashboard({ workload: state.workload, selectedKey: route.key, top: banner, detail: renderDetail(route) }));
+    const plan = renderPlan({ plan: state.plan, workload: state.workload, canPlan: canPlan(settings), onGenerate: generatePlan, onExport: exportPlan });
+    mount(app, header, renderDashboard({ workload: state.workload, selectedKey: route.key, top: banner, plan, detail: renderDetail(route) }));
   }
 }
 
