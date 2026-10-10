@@ -21,8 +21,8 @@ export function sizeChip(pr) {
 }
 
 /** Renders one compact row: status dot, title, the top reasons and the size. */
-function renderRow(item, lane, selectedKey) {
-  const reasons = (item.kind === "pr" ? prSignals(item) : issueSignals(item)).slice(0, ROW_REASONS);
+function renderRow(item, lane, selectedKey, rowTag) {
+  const reasons = [...(item.kind === "pr" ? prSignals(item) : issueSignals(item)).slice(0, ROW_REASONS), rowTag?.(item)].filter(Boolean);
   return el(
     "a",
     { href: itemHref(item), class: item.key === selectedKey ? "row selected" : "row" },
@@ -38,13 +38,13 @@ function renderRow(item, lane, selectedKey) {
 }
 
 /** Renders a lane with its header and rows, or nothing when it is empty. */
-function renderLane({ lane, items }, selectedKey) {
+function renderLane({ lane, items }, selectedKey, rowTag) {
   if (!items.length) return null;
   return el(
     "section",
     { class: "lane", id: `lane-${lane.id}` },
     el("header", { class: "lane-head" }, el("h2", {}, lane.title), el("span", { class: "count" }, items.length), el("span", { class: "lane-hint" }, lane.hint)),
-    el("div", { class: "rows" }, items.map((item) => renderRow(item, lane, selectedKey))),
+    el("div", { class: "rows" }, items.map((item) => renderRow(item, lane, selectedKey, rowTag))),
   );
 }
 
@@ -68,7 +68,7 @@ function renderSummary(groups) {
 }
 
 /** Renders the summary, the plan, the lanes and the detail pane. */
-export function renderDashboard({ workload, selectedKey, top, plan, detail }) {
+export function renderDashboard({ workload, selectedKey, top, plan, detail, rowTag }) {
   const groups = groupWorkload(workload);
   const empty = groups.every(({ items }) => !items.length);
   return el(
@@ -80,7 +80,7 @@ export function renderDashboard({ workload, selectedKey, top, plan, detail }) {
     el(
       "div",
       { class: "layout" },
-      el("div", { class: "lanes" }, empty ? el("p", { class: "empty" }, "Nothing open. Enjoy the quiet morning.") : groups.map((group) => renderLane(group, selectedKey))),
+      el("div", { class: "lanes" }, empty ? el("p", { class: "empty" }, "Nothing open. Enjoy the quiet morning.") : groups.map((group) => renderLane(group, selectedKey, rowTag))),
       el("aside", { class: "detail" }, detail ?? el("div", { class: "empty" }, el("p", {}, "Pick a pull request or issue"), el("p", { class: "muted" }, "Its reviews, threads and checks show up here."))),
     ),
   );

@@ -1,18 +1,21 @@
 import { downloadText, el, mount } from "./dom.js";
-import { fetchPrDetail, fetchWorkload } from "./github.js";
+import { explainerRequest, explainerStatus, explainerToMarkdown } from "./explainer.js";
+import { fetchPrDetail, fetchPrDiff, fetchWorkload } from "./github.js";
 import { generateJson, listModels } from "./llm.js";
 import { briefingRequest, planRequest, planToMarkdown } from "./planner.js";
 import { canPlan, clearStoredData, isConfigured, loadSettings, parseRepos, saveSettings } from "./settings.js";
-import { readCache, todayStamp, writeCache } from "./store.js";
+import { readCache, readEntry, todayStamp, writeCache } from "./store.js";
 import { normalizeWorkload } from "./triage.js";
 import { renderBriefing } from "./views/briefing.js";
 import { renderDashboard } from "./views/dashboard.js";
+import { explainerTag, renderExplainer } from "./views/explainer.js";
 import { renderHeader } from "./views/header.js";
 import { renderIssueDetail } from "./views/issue.js";
 import { renderPlan } from "./views/plan.js";
 import { renderPrDetail } from "./views/pr.js";
 import { renderSettings } from "./views/settings.js";
 
+const AUTO_REFRESH_MS = 15 * 60 * 1000;
 const app = document.getElementById("app");
 const state = {
   workload: null,
@@ -20,6 +23,8 @@ const state = {
   error: "",
   prDetails: new Map(),
   briefings: new Map(),
+  explainerJobs: new Map(),
+  syncingExplainers: false,
   plan: null,
   models: { list: [], loading: false, error: "" },
   draft: null,
@@ -47,7 +52,10 @@ async function refresh() {
   }
   state.loading = false;
   render();
-  if (state.workload) ensureTodayPlan();
+  if (state.workload) {
+    ensureTodayPlan();
+    syncExplainers();
+  }
 }
 
 /** Uses today's cached plan, or generates one on the first visit of the day. */
@@ -79,6 +87,52 @@ async function generatePlan() {
 /** Downloads today's plan as a Markdown file. */
 function exportPlan() {
   downloadText(`plan-${todayStamp()}.md`, planToMarkdown(state.plan.value, state.workload, todayStamp()));
+}
+
+/** Returns the storage name of a pull request's explainer. */
+function explainerName(pr) {
+  return `explainer:${pr.key}`;
+}
+
+/** Writes an explainer from the pull request's diff and saves it against the head commit. */
+async function writeExplainer(pr) {
+  if (state.explainerJobs.get(pr.key)?.loading) return;
+  const settings = loadSettings();
+  state.explainerJobs.set(pr.key, { loading: true });
+  render();
+  try {
+    const [detail, diff] = await Promise.all([fetchPrDetail(settings.githubToken, pr.repo, pr.number), fetchPrDiff(settings.githubToken, pr.repo, pr.number)]);
+    const content = await generateJson(settings, explainerRequest(pr, detail.body, diff));
+    writeCache(explainerName(pr), pr.headOid, { generatedAt: new Date().toISOString(), content });
+    state.explainerJobs.delete(pr.key);
+  } catch (error) {
+    state.explainerJobs.set(pr.key, { error: error.message });
+  }
+  render();
+}
+
+/** Rewrites, one at a time, every explainer whose pull request has new commits. */
+async function syncExplainers() {
+  const settings = loadSettings();
+  if (!canPlan(settings) || !settings.autoExplain || state.syncingExplainers) return;
+  state.syncingExplainers = true;
+  for (const pr of state.workload.prs) {
+    if (explainerStatus(readEntry(explainerName(pr)), pr) !== "fresh") await writeExplainer(pr);
+  }
+  state.syncingExplainers = false;
+}
+
+/** Downloads a pull request's explainer as a Markdown file. */
+function downloadExplainer(pr) {
+  const entry = readEntry(explainerName(pr));
+  const markdown = explainerToMarkdown(entry.value.content, pr, { sha: entry.stamp, generatedAt: entry.value.generatedAt });
+  downloadText(`${pr.repo.split("/")[1]}-${pr.number}-explainer.md`, markdown);
+}
+
+/** Returns the explainer badge for a pull request row. */
+function explainerRowTag(item) {
+  if (item.kind !== "pr" || !canPlan(loadSettings())) return null;
+  return explainerTag(readEntry(explainerName(item)), state.explainerJobs.get(item.key), item);
 }
 
 /** Fetches reviews, threads and checks for a pull request once per refresh. */
@@ -115,16 +169,24 @@ async function loadBriefing(pr, detail, { force = false } = {}) {
 function renderPr(pr) {
   if (!state.prDetails.has(pr.key)) loadPrDetail(pr);
   const loaded = state.prDetails.get(pr.key);
-  let extra = null;
-  if (loaded.detail && canPlan(loadSettings())) {
+  if (!canPlan(loadSettings())) return renderPrDetail(pr, loaded);
+  const explainer = renderExplainer({
+    pr,
+    entry: readEntry(explainerName(pr)),
+    job: state.explainerJobs.get(pr.key),
+    onRegenerate: () => writeExplainer(pr),
+    onDownload: () => downloadExplainer(pr),
+  });
+  let briefing = null;
+  if (loaded.detail) {
     if (!state.briefings.has(pr.key)) loadBriefing(pr, loaded.detail);
     const onRegenerate = () => {
       loadBriefing(pr, loaded.detail, { force: true });
       render();
     };
-    extra = renderBriefing({ briefing: state.briefings.get(pr.key), onRegenerate });
+    briefing = renderBriefing({ briefing: state.briefings.get(pr.key), onRegenerate });
   }
-  return renderPrDetail(pr, { ...loaded, extra });
+  return renderPrDetail(pr, { ...loaded, extra: [briefing, explainer] });
 }
 
 /** Renders the detail pane for the selected item, if any. */
@@ -181,10 +243,13 @@ function render() {
     mount(app, header, banner || el("p", { class: "muted empty loading" }, "Loading your pull requests and issues"));
   } else {
     const plan = renderPlan({ plan: state.plan, workload: state.workload, canPlan: canPlan(settings), onGenerate: generatePlan, onExport: exportPlan });
-    mount(app, header, renderDashboard({ workload: state.workload, selectedKey: route.key, top: banner, plan, detail: renderDetail(route) }));
+    mount(app, header, renderDashboard({ workload: state.workload, selectedKey: route.key, top: banner, plan, detail: renderDetail(route), rowTag: explainerRowTag }));
   }
 }
 
 window.addEventListener("hashchange", render);
+setInterval(() => {
+  if (document.visibilityState === "visible" && !state.loading && isConfigured(loadSettings())) refresh();
+}, AUTO_REFRESH_MS);
 if (isConfigured(loadSettings())) refresh();
 else render();

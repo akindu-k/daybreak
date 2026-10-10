@@ -71,6 +71,7 @@ export function normalizePr(node, now = Date.now()) {
       state: issue.state,
       stateReason: issue.stateReason,
     })),
+    headOid: head?.oid ?? "",
     updatedAt: node.updatedAt,
     idleDays: daysSince(node.updatedAt, now),
     ageDays: daysSince(node.createdAt, now),

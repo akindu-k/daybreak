@@ -24,7 +24,7 @@ function modelPicker(draft, models, onLoad) {
 /** Renders the settings form. */
 export function renderSettings(draft, { models, onSave, onClear, onLoadModels }) {
   const form = el("form", {});
-  const values = () => ({ ...draft, ...Object.fromEntries(new FormData(form)), remember: form.elements.remember.checked });
+  const values = () => ({ ...draft, ...Object.fromEntries(new FormData(form)), remember: form.elements.remember.checked, autoExplain: form.elements.autoExplain.checked });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     onSave(values());
@@ -39,9 +39,10 @@ export function renderSettings(draft, { models, onSave, onClear, onLoadModels })
     field(
       "Anthropic API key (optional)",
       el("input", { type: "password", name: "apiKey", value: draft.apiKey, autocomplete: "off" }),
-      el("span", {}, "Enables the daily plan and pull request briefings. ", link("https://console.anthropic.com/settings/keys", "Get a key")),
+      el("span", {}, "Enables the daily plan, briefings and explainers. ", link("https://console.anthropic.com/settings/keys", "Get a key")),
     ),
     modelPicker(draft, models, () => onLoadModels(values())),
+    el("label", { class: "check-field" }, el("input", { type: "checkbox", name: "autoExplain", checked: draft.autoExplain }), " Keep an explainer for every pull request, rewritten whenever new commits land"),
     field("Repositories (optional)", el("textarea", { name: "repos", rows: 3, placeholder: "owner/repo, owner/other-repo" }, draft.repos), "Limit the dashboard to these repositories. Leave empty for all."),
     el("label", { class: "check-field" }, el("input", { type: "checkbox", name: "remember", checked: draft.remember }), " Remember on this device (otherwise kept for this tab only)"),
     el("div", { class: "actions" }, el("button", { type: "submit", class: "primary" }, "Save"), el("button", { type: "button", class: "ghost danger", onclick: onClear }, "Clear stored data")),
