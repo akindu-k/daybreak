@@ -1,4 +1,5 @@
-const ENDPOINT = "https://api.github.com/graphql";
+const API = "https://api.github.com";
+const ENDPOINT = `${API}/graphql`;
 
 const HEAD_COMMIT = `
   commits(last: 1) {
@@ -95,6 +96,16 @@ export async function fetchWorkload(token, repos = []) {
     prs: data.prs.nodes.filter((node) => node.number),
     issues: data.issues.nodes.filter((node) => node.number),
   };
+}
+
+/** Fetches the unified diff of a pull request against its base branch. */
+export async function fetchPrDiff(token, repo, number) {
+  const response = await fetch(`${API}/repos/${repo}/pulls/${number}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github.diff" },
+  });
+  if (response.status === 406 || response.status === 422) throw new GitHubError("GitHub cannot produce a diff this large.");
+  if (!response.ok) throw new GitHubError(`GitHub diff request failed with status ${response.status}.`);
+  return response.text();
 }
 
 /** Fetches the reviews, threads, comments and checks of one pull request. */

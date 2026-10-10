@@ -1,5 +1,5 @@
 const STORAGE_KEY = "daybreak.settings";
-const DEFAULTS = { githubToken: "", apiKey: "", model: "", repos: "", remember: true };
+const DEFAULTS = { githubToken: "", apiKey: "", model: "", repos: "", autoExplain: true, remember: true };
 
 /** Reads settings from browser storage, falling back to defaults. */
 export function loadSettings() {

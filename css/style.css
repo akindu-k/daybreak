@@ -267,3 +267,12 @@ button.ghost:hover, .button.ghost:hover { background: var(--surface-2); }
 .inline { display: flex; gap: 0.5rem; }
 .inline select { flex: 1; min-width: 0; }
 .error-text { color: var(--bad); }
+
+/* Explainer */
+.explainer-status { font-size: 0.85rem; }
+.card details { margin-top: 0.6rem; }
+.card summary { cursor: pointer; font-weight: 550; color: var(--accent); }
+.explainer-body { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; font-size: 0.9rem; }
+.explainer-body ol { margin: 0.25rem 0; padding-left: 1.2rem; }
+.change { padding: 0.6rem 0.75rem; border-radius: 8px; background: var(--bg); margin-bottom: 0.4rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.change code { margin-right: 0.4rem; overflow-wrap: anywhere; }
